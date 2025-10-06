@@ -3,7 +3,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # m*xddot + c*xdot + k*x = u
-def get_state_derivative(state, u, k, m, c):
+def get_state_derivative(state, u, sys_props):
+    k = sys_props["k"]
+    c = sys_props["c"]
+    m = sys_props["m"] 
     x, xdot = state
     dx1 = xdot
     dx2 = (-k*x - c*xdot + u) / m
@@ -36,15 +39,15 @@ def PID_law(y,yc,ydot,ycdot,int_e,dt,gains):
     return control_output
 
 
+# ======================== Begin Simulation ============================== #
 
 # system properties
-c = 0.4                         # viscous damping 
-m = 1                           # mass
-k = 0.5                         # stiffness
+c = 0.4                              # viscous damping 
+m = 1                                # mass
+k = 0.5                              # stiffness
+c = -c;                              # make damping negative to make the system unstable
 output_sigmas = np.array([0.1, 0.6]) # sensor noise
-
-# make damping negative to make the system unstable
-c = -c; 
+sys_props = {"c" : c, "m" : m, "k" : k, "output_sigmas" : output_sigmas}
 
 # controller settings
 kp = 5
@@ -68,14 +71,14 @@ t = np.linspace(0, t_final, num_steps)
 # State histories
 states_truth    = [x0.copy()]
 states_sensed   = states_truth.copy()
-e_hist    = [(yc - x0[0])]
-edot_hist = [(ycdot - x0[1])]
-eint_hist = [int_e]
+e_hist          = [(yc - x0[0])]
+edot_hist       = [(ycdot - x0[1])]
+eint_hist       = [int_e]
 
+# run sim
 for ti in t[1:]:
     # add sensor noise
     state_sensed = add_noise(state_truth,output_sigmas);
- 
 
     # evaluate control law (use noisy signal for feedback)
     control_output = PID_law(state_sensed[0], yc, state_sensed[1], ycdot, int_e, dt, gains)
@@ -84,7 +87,7 @@ for ti in t[1:]:
 
     # evaluate dynamics
     # u = 0  # no input force
-    dx = get_state_derivative(state_truth, u, k, m, c)
+    dx = get_state_derivative(state_truth, u, sys_props)
     
     # integrate 
     state_truth = euler_integrate(state_truth, dx, dt)
@@ -99,6 +102,9 @@ for ti in t[1:]:
 # post-process
 states_truth = np.array(states_truth)
 states_sensed = np.array(states_sensed)
+e_hist    = np.array(e_hist)
+edot_hist = np.array(edot_hist)
+eint_hist = np.array(eint_hist)
 
 # Plot displacement and velocity
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
@@ -121,20 +127,6 @@ ax2.legend()
 
 plt.tight_layout()
 plt.show(block=False)
-
-
-# plot position only
-# plt.plot(t, states[:, 0])
-# plt.title("Damped Spring-Mass System")
-# plt.xlabel("Time [s]")
-# plt.ylabel("Displacement [m]")
-# plt.grid(True)
-# plt.show()
-
-# Convert error histories to arrays
-e_hist    = np.array(e_hist)
-edot_hist = np.array(edot_hist)
-eint_hist = np.array(eint_hist)
 
 # Plot error states
 fig2, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(8, 8), sharex=True)
