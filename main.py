@@ -15,6 +15,25 @@ def get_state_derivative(state, u, sys_props):
 def euler_integrate(x, dx, dt):
     return x + dx * dt
 
+def rk4_integrate(x, u, dt, f, sys_props):
+    """
+    Integrate one step using classical Runge–Kutta (RK4).
+    x: current state
+    u: control input
+    dt: timestep
+    f: function f(x, u, sys_props) returning xdot
+
+    example usage: state_truth = rk4_integrate(state_truth, u, dt, get_state_derivative, sys_props)
+    
+    """
+    k1 = f(x, u, sys_props)
+    k2 = f(x + 0.5 * dt * k1, u, sys_props)
+    k3 = f(x + 0.5 * dt * k2, u, sys_props)
+    k4 = f(x + dt * k3, u, sys_props)
+
+    return x + (dt / 6.0) * (k1 + 2*k2 + 2*k3 + k4)
+
+
 def add_noise(y, sigmas):
     return y + np.random.normal(loc=0, scale=sigmas)
 
@@ -57,13 +76,13 @@ def extended_kalman_filter(state_sensed,state_est_prev,control_input,sys_props,d
     
     # predictor equations
     state_est_dot = get_state_derivative(state_est_prev,control_input,sys_props)    # evaluate onboard model using previous state estimate
-    state_est_pre = euler_integrate(state_est_prev,state_est_dot,dt)        # precicted state estimate
+    state_est_pre = euler_integrate(state_est_prev,state_est_dot,dt)                # precicted state estimate
     F = numerical_jacobian(state_est_prev,control_input,sys_props)                  # state transition matrix (continuous)
-    F_discrete = np.eye(len(state_est_prev)) + F * dt                       # state transition matrix (discrete, assumes 1st order euler integration)
-    P_est_pre = F_discrete @ P_prev @ np.transpose(F_discrete) + Q          # predicted covariance estimate
+    F_discrete = np.eye(len(state_est_prev)) + F * dt                               # state transition matrix (discrete, assumes 1st order euler integration)
+    P_est_pre = F_discrete @ P_prev @ np.transpose(F_discrete) + Q                  # predicted covariance estimate
     
     # corrector equations
-    H = np.eye(len(state_est_pre))                                          # there is no measurement model, so H is simply identity
+    H = np.eye(len(state_est_pre))                                                  # there is no measurement model, so H is simply identity
     
     # HACK: only measure position, not velocity (forces EKF to estimate velocity)
     if True:
@@ -71,11 +90,11 @@ def extended_kalman_filter(state_sensed,state_est_prev,control_input,sys_props,d
         H = np.array([[1,0]])
         R = np.array([R[0,0]]) 
     
-    y_tilde = state_sensed - H @ state_est_pre                              # measurement residual
-    S = H @ P_est_pre @ np.transpose(H) + R                                 # covariance residual
-    K = P_est_pre @ np.transpose(H) @ np.linalg.inv(S)                      # Kalman gain
-    state_est_post = state_est_pre + K @ y_tilde                            # updated state estimate
-    P_est_post = (np.eye(len(state_est_post)) - K @ H ) @ P_est_pre         # updated covariance estimate
+    y_tilde = state_sensed - H @ state_est_pre                                      # measurement residual
+    S = H @ P_est_pre @ np.transpose(H) + R                                         # covariance residual
+    K = P_est_pre @ np.transpose(H) @ np.linalg.inv(S)                              # Kalman gain
+    state_est_post = state_est_pre + K @ y_tilde                                    # updated state estimate
+    P_est_post = (np.eye(len(state_est_post)) - K @ H ) @ P_est_pre                 # updated covariance estimate
 
     EKF_out = {
         "F": F,
