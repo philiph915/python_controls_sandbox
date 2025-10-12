@@ -155,6 +155,7 @@ states_est       = [state_est.copy()]
 e_hist           = [(yc - x0[0])]
 edot_hist        = [(ycdot - x0[1])]
 eint_hist        = [int_e]
+u_hist           = [u]
 P_hist           = [P_est.copy()]  # Kalman Filter Covariance Estimate (this is our confidence in our state estimates)
 
 # Kalman filter covariance terms
@@ -199,6 +200,7 @@ for ti in t[1:]:
     e_hist.append(control["e"])
     edot_hist.append(control["edot"])
     eint_hist.append(int_e)
+    u_hist.append(u)
 
 # post-process
 states_truth  = np.array(states_truth)
@@ -208,6 +210,7 @@ P_hist    = np.array(P_hist)
 e_hist    = np.array(e_hist)
 edot_hist = np.array(edot_hist)
 eint_hist = np.array(eint_hist)
+u_hist    = np.array(u_hist)
 
 
 # ================ Show Plots ================== # 
@@ -239,12 +242,12 @@ plt.tight_layout()
 plt.show(block=False)
 
 # Plot error states
-fig2, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(8, 8), sharex=True)
+fig2, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(8, 8), sharex=True)
 
 # Position error
 ax1.plot(t, e_hist)
 ax1.set_ylabel("e [rad]")
-ax1.set_title("Controller Error States")
+ax1.set_title("Controller States")
 ax1.grid(True)
 ax1.set_xlim(0, t_final)
 
@@ -260,6 +263,13 @@ ax3.set_ylabel("∫e dt")
 ax3.set_xlabel("Time [s]")
 ax3.grid(True)
 ax3.set_xlim(0, t_final)
+
+# Control Input
+ax4.plot(t, u_hist)
+ax4.set_ylabel("control input [Nm]")
+ax4.set_xlabel("Time [s]")
+ax4.grid(True)
+ax4.set_xlim(0, t_final)
 
 plt.tight_layout()
 plt.show(block=False)
