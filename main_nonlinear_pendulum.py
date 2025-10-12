@@ -55,8 +55,8 @@ def PID_law(y,yc,ydot,ycdot,int_e,dt,gains,u_sat):
 
     # anti-windup logic
     if np.abs(u) > u_sat:
-        eint = int_e
-        u = np.clip(u,-u_sat,u_sat)
+        eint = int_e                    # stop integrating
+        u = np.clip(u,-u_sat,u_sat)     # clamp control input
 
     # return states calculated in controller block
     control_output = {"u": u, "e": e, "edot": edot, "eint": eint}
@@ -85,8 +85,8 @@ def extended_kalman_filter(measurement,state_est_prev,control_input,sys_props,dt
 
     # Discrete transition Jacobian (from continuous via Euler linearization)
     F_c = numerical_jacobian(state_est_prev, control_input, get_state_derivative, sys_props)
-    F_d = np.eye(len(state_est_prev)) + F_c * dt
-    P_est_pre = F_d @ P_prev @ F_d.T + Q
+    F_d = np.eye(len(state_est_prev)) + F_c * dt                                # Euler linearization
+    P_est_pre = F_d @ P_prev @ F_d.T + Q                                        # A priori covariance estimate
     
     # corrector equations
     H = np.array([[1.0, 0.0]])                                                  # only measuring position
@@ -96,7 +96,7 @@ def extended_kalman_filter(measurement,state_est_prev,control_input,sys_props,dt
     K = P_est_pre @ np.transpose(H) @ np.linalg.inv(S)                          # Kalman gain
     
     state_est_post = state_est_pre + K @ y_tilde                                # updated state estimate
-    P_est_post = (np.eye(len(state_est_post)) - K @ H ) @ P_est_pre             # updated covariance estimate
+    P_est_post = (np.eye(len(state_est_post)) - K @ H ) @ P_est_pre             # A posteriori covariance estimate
 
     EKF_out = {
         "F": F_d,
@@ -127,7 +127,7 @@ m = 1                                # mass [kg]
 g = 9.81                             # gravity [mps2]
 c = 0.02                             # viscous damping coefficient [N*m*s/rad]
 
-Q_sigmas = np.array([0.001, 0.001])  # simulation process noise (velocity and acceleration noise)
+Q_sigmas = np.array([0.001, 0.001])  # simulation process noise 
 R_sigmas = np.array([0.25])          # simulation sensor noise [rad] (only sensing position)
 
 sys_props = {"L": L, "m": m, "g": g, "c": c, "Q": Q_sigmas, "R": R_sigmas}
@@ -136,18 +136,16 @@ sys_props = {"L": L, "m": m, "g": g, "c": c, "Q": Q_sigmas, "R": R_sigmas}
 kp = 100
 ki = 40
 kd = 10
-u_sat = 25  # max control torque in Nm
+u_sat = 10                              # max control torque in Nm
 gains = {"kp": kp, "ki": ki, "kd": kd}
-yc = cmd_pos_deg * np.pi / 180   # desired position in radians
-ycdot = 0               # desired velocity in radians per second
+yc = cmd_pos_deg * np.pi / 180          # desired position in radians
+ycdot = 0                               # desired velocity in radians per second
 
 # initial states
 x0 = np.array([ theta_0_deg*np.pi / 180, 0 ])
 int_e = 0
 state_truth = x0.copy()
 u = 0
-
-
 
 # Initial State and Covariance estimates for EKF
 state_est = np.array([1e-1, 1e-3])
@@ -166,7 +164,7 @@ P_hist           = [P_est.copy()]  # Kalman Filter Covariance Estimate (this is 
 
 # Kalman filter covariance terms
 Q = np.diag(Q_sigmas**2)                            # process covariance
-R = np.array([[(R_sigmas[0]*10)**2]])                    # sensor covariance (variance = sigma^2)
+R = np.array([2.5**2])                            # sensor covariance (variance = sigma^2)
 
 # Flag for enabling the Kalman Filter
 useEKF = True
@@ -323,8 +321,6 @@ ax4.grid(True)
 ax4.legend()
 ax4.set_xlim(0, t_final)
 
-
-
 # Velocity
 ax5.fill_between(
     t,
@@ -340,8 +336,6 @@ ax5.set_ylabel("Velocity [rad/s]")
 ax5.grid(True)
 ax5.legend()
 ax5.set_xlim(0, t_final)
-
-
 
 plt.tight_layout()
 plt.show(block=False)
@@ -364,17 +358,11 @@ ax_anim.set_title("Pendulum Animation")
 rod_line, = ax_anim.plot([], [], 'o-', lw=2, color='C0')
 trace_line, = ax_anim.plot([], [], 'r-', lw=2, alpha=0.25)  # optional trace of the bob
 
-# Text for displaying simulation time
-time_text = ax_anim.text(
+UI_text = ax_anim.text(
     0.02, 0.95, '', transform=ax_anim.transAxes,
     ha='left', va='top', fontsize=12, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none')
 )
 
-# Text for displaying pendulum angle
-angle_text = ax_anim.text(
-    0.02, 0.85, '', transform=ax_anim.transAxes,
-    ha='left', va='top', fontsize=12, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none')
-)
 
 trace_x, trace_y = [], []
 
@@ -383,9 +371,9 @@ def init():
     trace_line.set_data([], [])
     trace_x.clear()
     trace_y.clear()
-    time_text.set_text('')
-    angle_text.set_text('')
-    return rod_line, trace_line, time_text, angle_text
+    UI_text.set_text('')
+
+    return rod_line, trace_line, UI_text
 
 def update(frame):
     x = x_pend[frame]
@@ -404,11 +392,14 @@ def update(frame):
     trace_y.append(y)
     trace_line.set_data(trace_x, trace_y)
 
-    # Update time text
-    time_text.set_text(f't = {t[frame]:.2f} s')
-    angle_text.set_text(f'theta = {outputs_truth[frame]*180/np.pi:.2f} deg')
+    # Update UI text
+    UI_text.set_text(
+    f"t = {t[frame]:.2f} s\n"
+    f"θ = {outputs_truth[frame]*180/np.pi:.2f} deg\n"
+    f"u = {u_hist[frame]:.2f} Nm"
+)
 
-    return rod_line, trace_line, time_text, angle_text
+    return rod_line, trace_line, UI_text
 
 # Animate
 fps = int(1/dt) // 60  # skip frames to control playback speed
