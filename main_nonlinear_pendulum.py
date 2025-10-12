@@ -38,7 +38,7 @@ def add_noise(y, sigmas):
     y = np.array(y)
     return y + np.random.normal(0, sigmas)
 
-def PID_law(y,yc,ydot,ycdot,int_e,dt,gains):
+def PID_law(y,yc,ydot,ycdot,int_e,dt,gains,u_sat):
 
     # PID law gains
     kp = gains["kp"]
@@ -52,6 +52,11 @@ def PID_law(y,yc,ydot,ycdot,int_e,dt,gains):
 
     # evaluate control law
     u = kp*e + ki*eint + kd*edot
+
+    # anti-windup logic
+    if np.abs(u) > u_sat:
+        eint = int_e
+        u = np.clip(u,-u_sat,u_sat)
 
     # return states calculated in controller block
     control_output = {"u": u, "e": e, "edot": edot, "eint": eint}
@@ -131,6 +136,7 @@ sys_props = {"L": L, "m": m, "g": g, "c": c, "Q": Q_sigmas, "R": R_sigmas}
 kp = 100
 ki = 40
 kd = 10
+u_sat = 25  # max control torque in Nm
 gains = {"kp": kp, "ki": ki, "kd": kd}
 yc = cmd_pos_deg * np.pi / 180   # desired position in radians
 ycdot = 0               # desired velocity in radians per second
@@ -179,7 +185,7 @@ for ti in t[1:]:
         state_est = state_truth.copy()
 
     # evaluate control law (use state estimates for feedback)
-    control = PID_law(state_est[0], yc, state_est[1], ycdot, int_e, dt, gains)
+    control = PID_law(state_est[0], yc, state_est[1], ycdot, int_e, dt, gains, u_sat)
     if ti > t_ctrl_enable:
         u = control["u"]
         int_e = control["eint"] 
