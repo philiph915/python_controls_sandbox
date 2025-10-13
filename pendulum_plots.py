@@ -195,6 +195,190 @@ def animate_pendulum_dashboard(
     plt.subplots_adjust(right=0.9)
     plt.show()
 
+def animate_pendulum_dashboard_dynamic(
+    t, dt,
+    states_truth,     # (N,2): [theta, theta_dot]
+    states_est,       # (N,2)
+    measurements,     # (N,)  position measurements (rad)
+    P_hist,           # (N,2,2)
+    control_hist,     # (N,)
+    L,                # pendulum length
+    window=3.0,       # seconds visible
+    trace_len=0.75,   # seconds of pendulum tail to keep
+    saveFig=False
+):
+    N = len(t)
+    skip = max(1, int(1/dt) // 70)
+    frames = range(0, N, skip)
+    max_pts = int(window / dt)
+    max_tail = int(trace_len / dt)
+
+    # Pendulum coordinates
+    x_pend = L * np.cos(states_truth[:, 0])
+    y_pend = L * np.sin(states_truth[:, 0])
+
+    # ±3 sigma envelopes
+    pos_3s = 3.0 * np.sqrt(P_hist[:, 0, 0])
+    vel_3s = 3.0 * np.sqrt(P_hist[:, 1, 1])
+
+    # ---- Figure layout ----
+    fig = plt.figure(figsize=(14, 9))
+    gs = fig.add_gridspec(3, 2, width_ratios=[1, 1.5])
+
+    # Pendulum
+    ax_pend = fig.add_subplot(gs[:, 0])
+    ax_pend.set_xlim(-L*1.2, L*1.2)
+    ax_pend.set_ylim(-L*1.2, L*1.2)
+    ax_pend.set_aspect('equal', 'box')
+    ax_pend.grid(True)
+    ax_pend.set_title("Pendulum")
+
+    rod_line, = ax_pend.plot([], [], 'o-', lw=2, color='C0')
+    trace_line, = ax_pend.plot([], [], '-', lw=2, color='r', alpha=0.4)
+    trace_x, trace_y = [], []
+
+    UI_text = ax_pend.text(
+        0.02, 0.95, '', transform=ax_pend.transAxes,
+        ha='left', va='top', fontsize=12,
+        bbox=dict(facecolor='white', alpha=0.7, edgecolor='none')
+    )
+
+    # Time histories
+    ax_pos = fig.add_subplot(gs[0, 1])
+    ax_vel = fig.add_subplot(gs[1, 1])
+    ax_ctrl = fig.add_subplot(gs[2, 1])
+
+    for ax in (ax_pos, ax_vel, ax_ctrl):
+        ax.grid(True)
+
+    meas_line,     = ax_pos.plot([], [], '.', ms=3, alpha=0.5, c='C0', label='Meas')
+    pos_est_line,  = ax_pos.plot([], [], 'r',  label='Est')
+    pos_truth_line,= ax_pos.plot([], [], 'gray', label='Truth')
+    pos_sig_up,    = ax_pos.plot([], [], 'C1--', lw=1, label='±3 sigma')
+    pos_sig_dn,    = ax_pos.plot([], [], 'C1--', lw=1)
+    ax_pos.set_ylabel("θ [ deg]")
+    ax_pos.legend(loc='upper left', bbox_to_anchor=(1.02, 1.0), borderaxespad=0)
+    ax_pos.set_title("State Estimates")
+
+    vel_est_line,  = ax_vel.plot([], [], 'r',   label='Est')
+    vel_truth_line,= ax_vel.plot([], [], 'gray',label='Truth')
+    vel_sig_up,    = ax_vel.plot([], [], 'C1--', lw=1, label='±3 sigma')
+    vel_sig_dn,    = ax_vel.plot([], [], 'C1--', lw=1)
+    ax_vel.set_ylabel("Vel [ deg/s]")
+    ax_vel.legend(loc='upper left', bbox_to_anchor=(1.02, 1.0), borderaxespad=0)
+    ax_vel.set_xlabel("Time [s]")
+
+    ctrl_line, = ax_ctrl.plot([], [], 'b', label='Ctrl Input')
+    ax_ctrl.set_ylabel("τ [Nm]")
+    ax_ctrl.set_xlabel("Time [s]")
+    ax_ctrl.legend(loc='upper left', bbox_to_anchor=(1.02, 1.0), borderaxespad=0)
+    ax_ctrl.set_title("Control Input")
+
+    # Init x-lims
+    ax_pos.set_xlim(0, min(window, t[-1]))
+    ax_vel.set_xlim(0, min(window, t[-1]))
+    ax_ctrl.set_xlim(0, min(window, t[-1]))
+
+    def init():
+        rod_line.set_data([], [])
+        trace_line.set_data([], [])
+        trace_x.clear()
+        trace_y.clear()
+        for line in (meas_line, pos_est_line, pos_truth_line,
+                     pos_sig_up, pos_sig_dn,
+                     vel_est_line, vel_truth_line,
+                     vel_sig_up, vel_sig_dn,
+                     ctrl_line):
+            line.set_data([], [])
+        UI_text.set_text('')
+        return (rod_line, trace_line, meas_line, pos_est_line, pos_truth_line,
+                pos_sig_up, pos_sig_dn, vel_est_line, vel_truth_line,
+                vel_sig_up, vel_sig_dn, ctrl_line, UI_text)
+
+    def update(frame_i):
+        i = frame_i
+        t_now = t[i]
+
+        # Pendulum
+        x = x_pend[i]; y = y_pend[i]
+        rod_line.set_data([0, x], [0, y])
+        trace_x.append(x); trace_y.append(y)
+        if len(trace_x) > max_tail:
+            del trace_x[0]; del trace_y[0]
+        trace_line.set_data(trace_x, trace_y)
+
+        UI_text.set_text(
+            f"t = {t_now:.2f} s\n"
+            f"θ = {states_truth[i,0]*R2D:.1f}°\n"
+            f"τ = {control_hist[i]:.2f} Nm"
+        )
+
+        # Grow → scroll window
+        if t_now <= window:
+            i0 = 0
+            ax_pos.set_xlim(0, max(t_now, dt))
+            ax_vel.set_xlim(0, max(t_now, dt))
+            ax_ctrl.set_xlim(0, max(t_now, dt))
+        else:
+            i0 = i - max_pts + 1
+            left = t[i0]; right = t_now
+            ax_pos.set_xlim(left, right)
+            ax_vel.set_xlim(left, right)
+            ax_ctrl.set_xlim(left, right)
+
+        sl = slice(i0, i+1)
+
+        # Position
+        meas_line.set_data(t[sl],       R2D*measurements[sl])
+        pos_est_line.set_data(t[sl],    R2D*states_est[sl, 0])
+        pos_truth_line.set_data(t[sl],  R2D*states_truth[sl, 0])
+        pos_sig_up.set_data(t[sl],      R2D*(states_est[sl, 0] + pos_3s[sl]))
+        pos_sig_dn.set_data(t[sl],      R2D*(states_est[sl, 0] - pos_3s[sl]))
+        ax_pos.relim()
+        ax_pos.autoscale_view(scalex=False, scaley=True)
+
+        # Velocity
+        vel_est_line.set_data(t[sl],    R2D*states_est[sl, 1])
+        vel_truth_line.set_data(t[sl],  R2D*states_truth[sl, 1])
+        vel_sig_up.set_data(t[sl],      R2D*(states_est[sl, 1] + vel_3s[sl]))
+        vel_sig_dn.set_data(t[sl],      R2D*(states_est[sl, 1] - vel_3s[sl]))
+        ax_vel.relim()
+        ax_vel.autoscale_view(scalex=False, scaley=True)
+
+        # Control
+        ctrl_line.set_data(t[sl], control_hist[sl])
+        ax_ctrl.relim()
+        ax_ctrl.autoscale_view(scalex=False, scaley=True)
+
+        return (rod_line, trace_line, meas_line, pos_est_line, pos_truth_line,
+                pos_sig_up, pos_sig_dn, vel_est_line, vel_truth_line,
+                vel_sig_up, vel_sig_dn, ctrl_line, UI_text)
+    
+    plt.tight_layout()
+    plt.subplots_adjust(right=0.9)
+
+    ani = animation.FuncAnimation(
+        fig, update,
+        frames=frames,
+        init_func=init,
+        blit=False,   # must be False for autoscale to work
+        interval=max(15, int(1000*dt*skip)),
+        repeat=True
+    )
+
+    if saveFig:
+        print("Saving animation...")
+        ani.save(
+            os.path.join("figs","nonlinear_pendulum","pendulum_animation_dynamic.gif"),
+            writer="pillow",
+            fps=20,
+            dpi=80,
+        )
+        print("Done.\n")
+
+    plt.show()
+
+
 def make_pendulum_static_plots(t, t_final,
     states_truth,     # (N,2): [theta, theta_dot]
     states_est,       # (N,2)

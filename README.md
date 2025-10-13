@@ -2,7 +2,7 @@
 This repository is meant to experiment with controls problems in python. This is basically a learning exercise for doing things in python that I would normally do in Matlab.
 
 ## Nonlinear Pendulum Simulation with PID Control and Extended Kalman Filter
-![](figs/nonlinear_pendulum/pendulum_animation.gif)
+![](figs/nonlinear_pendulum/pendulum_animation_dynamic.gif)
 
 ## Second Order System with PID Control and Kalman Filtering
 

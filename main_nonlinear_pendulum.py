@@ -228,8 +228,16 @@ make_pendulum_static_plots(
     e_hist, edot_hist, eint_hist
     )
 
-# Show pendulum "DAQ" figure
-from pendulum_plots import animate_pendulum_dashboard
-ani = animate_pendulum_dashboard(
-    t, dt, states_truth, states_est, measurements, P_hist, u_hist, L, saveFig = False
+# # Show pendulum "DAQ" figure
+# from pendulum_plots import animate_pendulum_dashboard
+# ani = animate_pendulum_dashboard(
+#     t, dt, states_truth, states_est, measurements, P_hist, u_hist, L, saveFig = False
+# )
+
+# Show pendulum "DAQ" figure (includes dynamic y-axis scaling)
+from pendulum_plots import animate_pendulum_dashboard_dynamic
+ani = animate_pendulum_dashboard_dynamic(
+    t, dt, states_truth, states_est, measurements, P_hist, u_hist, L, saveFig = False, window=1
 )
+
+# NOTE: ADD BACK IN DYNAMIC Y-SCALING FOR README, REDUCE WINDOW SIZE TO SOMETHING LIKE 1 SECOND
