@@ -85,6 +85,7 @@ def animate_pendulum_dashboard(
     ax_vel.set_ylabel("Vel [ deg/s]")
     ax_vel.set_ylim(vel_min, vel_max)
     ax_vel.legend(loc='upper left', bbox_to_anchor=(1.02, 1.0), borderaxespad=0)
+    ax_vel.set_xlabel("Time [s]")
 
     # Control
     ctrl_line,     = ax_ctrl.plot([], [], 'b', label='Ctrl Input')
@@ -237,7 +238,6 @@ def make_pendulum_static_plots(t, t_final,
     # Integral error
     ax3.plot(t, eint_hist)
     ax3.set_ylabel("∫e dt")
-    ax3.set_xlabel("Time [s]")
     ax3.grid(True)
     ax3.set_xlim(0, t_final)
 
