@@ -128,7 +128,7 @@ g = 9.81                             # gravity [mps2]
 c = 0.02                             # viscous damping coefficient [N*m*s/rad]
 
 Q_sigmas = np.array([0.001, 0.001])  # simulation process noise 
-R_sigmas = np.array([0.25])          # simulation sensor noise [rad] (only sensing position)
+R_sigmas = np.array([0.1])          # simulation sensor noise [rad] (only sensing position)
 
 sys_props = {"L": L, "m": m, "g": g, "c": c, "Q": Q_sigmas, "R": R_sigmas}
 
@@ -149,7 +149,7 @@ u = 0
 
 # Initial State and Covariance estimates for EKF
 state_est = np.array([1e-1, 1e-3])
-P_est = np.diag([4, 10])
+P_est = np.diag([.1, 10])
 
 # State histories
 outputs_truth    = [state_truth[0]]
@@ -164,7 +164,7 @@ P_hist           = [P_est.copy()]  # Kalman Filter Covariance Estimate (this is 
 
 # Kalman filter covariance terms
 Q = np.diag(Q_sigmas**2)                            # process covariance
-R = np.array([2.5**2])                            # sensor covariance (variance = sigma^2)
+R = np.array([1**2])                            # sensor covariance (variance = sigma^2)
 
 # Flag for enabling the Kalman Filter
 useEKF = True
@@ -218,6 +218,15 @@ u_hist    = np.array(u_hist)
 
 
 # ================ Show Plots ================== # 
+
+
+# Show pendulum "DAQ" figure
+from animate_pendulum_dashboard import animate_pendulum_dashboard
+ani = animate_pendulum_dashboard(
+    t, dt, states_truth, states_est, measurements, P_hist, u_hist, L
+)
+
+quit()
 
 # Plot displacement and velocity
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
@@ -341,79 +350,249 @@ plt.tight_layout()
 plt.show(block=False)
 
 
-import matplotlib.animation as animation
+# import matplotlib.pyplot as plt
+# import matplotlib.animation as animation
+# import numpy as np
 
-# Pendulum position from truth data
-x_pend = L * np.cos(states_truth[:, 0])
-y_pend = L * np.sin(states_truth[:, 0])
+# # --- positions for the bob (use your existing convention) ---
+# x_pend = L * np.cos(states_truth[:, 0])
+# y_pend = L * np.sin(states_truth[:, 0])
 
-fig_anim, ax_anim = plt.subplots(figsize=(5, 5))
-ax_anim.set_xlim(-L*1.2, L*1.2)
-ax_anim.set_ylim(-L*1.2, L*1.2)
-ax_anim.set_aspect('equal', 'box')
-ax_anim.grid(True)
-ax_anim.set_title("Pendulum Animation")
+# pos_sigma = np.sqrt(P_hist[:, 0, 0])
+# vel_sigma = np.sqrt(P_hist[:, 1, 1])
 
-# Create line for pendulum rod and point for mass
-rod_line, = ax_anim.plot([], [], 'o-', lw=2, color='C0')
-trace_line, = ax_anim.plot([], [], 'r-', lw=2, alpha=0.25)  # optional trace of the bob
+# # Figure with 3 rows: pendulum, position, velocity
+# fig, (ax_anim, ax_pos, ax_vel) = plt.subplots(
+#     3, 1, figsize=(9, 12), gridspec_kw={'height_ratios': [2, 1, 1]}
+# )
 
-UI_text = ax_anim.text(
-    0.02, 0.95, '', transform=ax_anim.transAxes,
-    ha='left', va='top', fontsize=12, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none')
-)
+# # ---------------- Pendulum panel ----------------
+# ax_anim.set_xlim(-1.2*L, 1.2*L)
+# ax_anim.set_ylim(-1.2*L, 1.2*L)
+# ax_anim.set_aspect('equal', 'box')
+# ax_anim.grid(True)
+# ax_anim.set_title("Pendulum + Streaming EKF Plots")
+
+# rod_line,   = ax_anim.plot([], [], 'o-', lw=2, color='C0')
+# trace_line, = ax_anim.plot([], [], '-',  lw=1, color='r', alpha=0.25)
+# trace_x, trace_y = [], []
+
+# ui_text = ax_anim.text(
+#     0.02, 0.95, '', transform=ax_anim.transAxes, ha='left', va='top',
+#     fontsize=12, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none')
+# )
+
+# # ---------------- Position panel ----------------
+# ax_pos.set_ylabel("Angle [rad]")
+# ax_pos.grid(True)
+# ax_pos.set_xlim(t[0], t[-1])
+
+# pos_meas_line,  = ax_pos.plot([], [], '.', ms=3, alpha=0.35, label="Meas")
+# pos_est_line,   = ax_pos.plot([], [], '-',  color='red',  label="Est")
+# pos_truth_line, = ax_pos.plot([], [], '-',  color='gray', label="Truth")
+# pos_fill = [None]  # holder so we can replace the PolyCollection each frame
+# # ax_pos.legend(loc='upper right')
+
+# # ---------------- Velocity panel ----------------
+# ax_vel.set_ylabel("Vel [rad/s]")
+# ax_vel.set_xlabel("Time [s]")
+# ax_vel.grid(True)
+# ax_vel.set_xlim(t[0], t[-1])
+
+# vel_est_line,   = ax_vel.plot([], [], '-', color='red',  label="Est")
+# vel_truth_line, = ax_vel.plot([], [], '-', color='gray', label="Truth")
+# vel_fill = [None]
+# # ax_vel.legend(loc='upper right')
+
+# # --------- Choose streaming mode: grow or rolling window ----------
+# GROW_MODE = False          # True: from 0 → now; False: rolling window
+# WINDOW_SEC = 2.0          # used if GROW_MODE is False
+
+# def init():
+#     rod_line.set_data([], [])
+#     trace_line.set_data([], [])
+#     ui_text.set_text('')
+
+#     pos_meas_line.set_data([], [])
+#     pos_est_line.set_data([], [])
+#     pos_truth_line.set_data([], [])
+#     if pos_fill[0] is not None:
+#         pos_fill[0].remove(); pos_fill[0] = None
+
+#     vel_est_line.set_data([], [])
+#     vel_truth_line.set_data([], [])
+#     if vel_fill[0] is not None:
+#         vel_fill[0].remove(); vel_fill[0] = None
+
+#     pos_fill[0] = ax_pos.fill_between([], [], [], color='C1', alpha=0.2, label='±3σ')
+#     vel_fill[0] = ax_vel.fill_between([], [], [], color='C1', alpha=0.2, label='±3σ')
+#     ax_pos.legend(loc='upper right')
+#     ax_vel.legend(loc='upper right')
+
+#     trace_x.clear(); trace_y.clear()
+#     return (rod_line, trace_line, ui_text,
+#             pos_meas_line, pos_est_line, pos_truth_line,
+#             vel_est_line, vel_truth_line)
+
+# def update(frame):
+#     # --- select time slice for the time-series ---
+#     if GROW_MODE:
+#         start_idx = 0
+#     else:
+#         t0 = t[frame] - WINDOW_SEC
+#         start_idx = max(0, np.searchsorted(t, t0))
+#     sl = slice(start_idx, frame+1)
+#     tt = t[sl]
+
+#     # --- pendulum ---
+#     x = x_pend[frame]
+#     y = y_pend[frame]
+#     rod_line.set_data([0, x], [0, y])
+
+#     # Trace should always start at the beginning, not start_idx
+#     trace_x.append(x)
+#     trace_y.append(y)
+#     trace_line.set_data(trace_x, trace_y)   # <— changed line
+
+#     ui_text.set_text(
+#         f"t = {t[frame]:.2f} s\n"
+#         f"θ = {states_truth[frame,0]*180/np.pi:.2f}°\n"
+#         f"u = {u_hist[frame]:.2f}"
+#     )
+
+#     # --- position and velocity time-series (same as before) ---
+#     pos_meas_line.set_data(tt, measurements[sl])
+#     pos_est_line.set_data(tt, states_est[sl, 0])
+#     pos_truth_line.set_data(tt, states_truth[sl, 0])
+
+#     if pos_fill[0] is not None:
+#         pos_fill[0].remove()
+#     pos_fill[0] = ax_pos.fill_between(
+#         tt,
+#         states_est[sl, 0] - 3*pos_sigma[sl],
+#         states_est[sl, 0] + 3*pos_sigma[sl],
+#         color='C1', alpha=0.2, label = "±3 sigma"
+#     )
+
+#     vel_est_line.set_data(tt, states_est[sl, 1])
+#     vel_truth_line.set_data(tt, states_truth[sl, 1])
+
+#     if vel_fill[0] is not None:
+#         vel_fill[0].remove()
+#     vel_fill[0] = ax_vel.fill_between(
+#         tt,
+#         states_est[sl, 1] - 3*np.sqrt(P_hist[sl, 1, 1]),
+#         states_est[sl, 1] + 3*np.sqrt(P_hist[sl, 1, 1]),
+#         color='C1', alpha=0.2, label = "±3 sigma"
+#     )
+
+#     if not GROW_MODE:
+#         if len(tt) > 1:
+#             ax_pos.set_xlim(tt[0], tt[-1])
+#             ax_vel.set_xlim(tt[0], tt[-1])
+#         else:
+#             # set a small window around tt[0] to avoid singular transform
+#             ax_pos.set_xlim(tt[0]-1e-3, tt[0]+1e-3)
+#             ax_vel.set_xlim(tt[0]-1e-3, tt[0]+1e-3)
 
 
-trace_x, trace_y = [], []
+#     return (rod_line, trace_line, ui_text,
+#             pos_meas_line, pos_est_line, pos_truth_line,
+#             vel_est_line, vel_truth_line, pos_fill[0], vel_fill[0])
 
-def init():
-    rod_line.set_data([], [])
-    trace_line.set_data([], [])
-    trace_x.clear()
-    trace_y.clear()
-    UI_text.set_text('')
 
-    return rod_line, trace_line, UI_text
+# # Frame skipping to control speed
+# fps = max(1, int(1/dt) // 60)
 
-def update(frame):
-    x = x_pend[frame]
-    y = y_pend[frame]
+# ani = animation.FuncAnimation(
+#     fig, update,
+#     frames=range(0, len(t), fps),
+#     init_func=init,
+#     blit=False,                    # simpler & avoids backend resize bug
+#     interval=dt*1000*fps,
+#     repeat=True
+# )
 
-    # Rod from origin to mass
-    rod_line.set_data([0, x], [0, y])
+# # Avoid tight_layout-before-animation bug; adjust spacing manually if needed
+# fig.subplots_adjust(hspace=0.35)
+# plt.show()
 
-    # # Remove trace history
-    # if frame > 1000:
-    #     trace_x.pop(0)
-    #     trace_y.pop(0)
 
-    # Add to trace
-    trace_x.append(x)
-    trace_y.append(y)
-    trace_line.set_data(trace_x, trace_y)
 
-    # Update UI text
-    UI_text.set_text(
-    f"t = {t[frame]:.2f} s\n"
-    f"θ = {outputs_truth[frame]*180/np.pi:.2f} deg\n"
-    f"u = {u_hist[frame]:.2f} Nm"
-)
 
-    return rod_line, trace_line, UI_text
+# import matplotlib.animation as animation
 
-# Animate
-fps = int(1/dt) // 60  # skip frames to control playback speed
-ani = animation.FuncAnimation(
-    fig_anim,
-    update,
-    frames=range(0, len(t), fps),
-    init_func=init,
-    blit=True,
-    interval=dt*1000*fps,  # in ms
-    repeat=True
-)
+# # Pendulum position from truth data
+# x_pend = L * np.cos(states_truth[:, 0])
+# y_pend = L * np.sin(states_truth[:, 0])
 
-plt.show()
+# fig_anim, ax_anim = plt.subplots(figsize=(5, 5))
+# ax_anim.set_xlim(-L*1.2, L*1.2)
+# ax_anim.set_ylim(-L*1.2, L*1.2)
+# ax_anim.set_aspect('equal', 'box')
+# ax_anim.grid(True)
+# ax_anim.set_title("Pendulum Animation")
+
+# # Create line for pendulum rod and point for mass
+# rod_line, = ax_anim.plot([], [], 'o-', lw=2, color='C0')
+# trace_line, = ax_anim.plot([], [], 'r-', lw=2, alpha=0.25)  # optional trace of the bob
+
+# UI_text = ax_anim.text(
+#     0.02, 0.95, '', transform=ax_anim.transAxes,
+#     ha='left', va='top', fontsize=12, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none')
+# )
+
+
+# trace_x, trace_y = [], []
+
+# def init():
+#     rod_line.set_data([], [])
+#     trace_line.set_data([], [])
+#     trace_x.clear()
+#     trace_y.clear()
+#     UI_text.set_text('')
+
+#     return rod_line, trace_line, UI_text
+
+# def update(frame):
+#     x = x_pend[frame]
+#     y = y_pend[frame]
+
+#     # Rod from origin to mass
+#     rod_line.set_data([0, x], [0, y])
+
+#     # # Remove trace history
+#     # if frame > 1000:
+#     #     trace_x.pop(0)
+#     #     trace_y.pop(0)
+
+#     # Add to trace
+#     trace_x.append(x)
+#     trace_y.append(y)
+#     trace_line.set_data(trace_x, trace_y)
+
+#     # Update UI text
+#     UI_text.set_text(
+#     f"t = {t[frame]:.2f} s\n"
+#     f"θ = {outputs_truth[frame]*180/np.pi:.2f} deg\n"
+#     f"u = {u_hist[frame]:.2f} Nm"
+# )
+
+#     return rod_line, trace_line, UI_text
+
+# # Animate
+# fps = int(1/dt) // 60  # skip frames to control playback speed
+# ani = animation.FuncAnimation(
+#     fig_anim,
+#     update,
+#     frames=range(0, len(t), fps),
+#     init_func=init,
+#     blit=True,
+#     interval=dt*1000*fps,  # in ms
+#     repeat=True
+# )
+
+# plt.show()
 
 
 

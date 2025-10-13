@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from collections import deque
+
+R2D = 180 / np.pi
 
 def animate_pendulum_dashboard(
     t, dt,
@@ -11,169 +12,169 @@ def animate_pendulum_dashboard(
     P_hist,           # (N,2,2)
     control_hist,     # (N,)
     L,                # pendulum length
+    window=3.0,       # seconds visible
+    trace_len=0.75    # seconds of pendulum tail to keep
 ):
-    # Pendulum coordinates
-    x_pend = L * np.cos(states_truth[:, 0])   # sin for x
-    y_pend = L * np.sin(states_truth[:, 0])  # -cos for y (standard orientation)
+    N = len(t)
+    skip = max(1, int(1/dt) // 60)       # playback throttle
+    frames = range(0, N, skip)
+    max_pts = int(window / dt)
+    max_tail = int(trace_len / dt)
 
-    # Sliding window length for time histories
-    window = 3  # seconds
+    # ---- Orientation you asked for: x= L*cos(theta), y = L*sin(theta)
+    x_pend = L * np.cos(states_truth[:, 0])
+    y_pend = L * np.sin(states_truth[:, 0])
 
-    # === Figure layout ===
+    # Precompute ±3 sigma envelopes (fast per-frame)
+    pos_3s = 3.0 * np.sqrt(P_hist[:, 0, 0])
+    vel_3s = 3.0 * np.sqrt(P_hist[:, 1, 1])
+
+    # Reasonable fixed y-limits (avoids autoscale cost each frame)
+    pos_min = np.min([states_truth[:,0]-pos_3s, states_truth[:,0]+pos_3s, measurements])    * 1.2 * R2D
+    pos_max = np.max([states_truth[:,0]-pos_3s, states_truth[:,0]+pos_3s, measurements])    * 1.2 * R2D
+    vel_min = np.min([states_truth[:,1]-vel_3s, states_truth[:,1]+vel_3s, states_est[:,1]]) * 1.2 * R2D
+    vel_max = np.max([states_truth[:,1]-vel_3s, states_truth[:,1]+vel_3s, states_est[:,1]]) * 1.2 * R2D
+    tau_min = np.min(control_hist) * 1.2
+    tau_max = np.max(control_hist) * 1.2
+
+    # ---- Figure layout
     fig = plt.figure(figsize=(14, 8))
     gs = fig.add_gridspec(3, 2, width_ratios=[1, 1.5])
 
-    # Left: Pendulum plot
+    # Left: pendulum
     ax_pend = fig.add_subplot(gs[:, 0])
     ax_pend.set_xlim(-L*1.2, L*1.2)
     ax_pend.set_ylim(-L*1.2, L*1.2)
     ax_pend.set_aspect('equal', 'box')
     ax_pend.grid(True)
-    ax_pend.set_title("Pendulum Animation")
+    ax_pend.set_title("Pendulum")
 
     rod_line, = ax_pend.plot([], [], 'o-', lw=2, color='C0')
     trace_line, = ax_pend.plot([], [], '-', lw=2, color='r', alpha=0.4)
-
-    # Keep trace index separate
     trace_x, trace_y = [], []
 
-    # UI text
     UI_text = ax_pend.text(
         0.02, 0.95, '', transform=ax_pend.transAxes,
         ha='left', va='top', fontsize=12,
         bbox=dict(facecolor='white', alpha=0.7, edgecolor='none')
     )
 
-    # === Right: Time histories ===
+    # Right: time histories (absolute time on x-axis)
     ax_pos = fig.add_subplot(gs[0, 1])
     ax_vel = fig.add_subplot(gs[1, 1])
     ax_ctrl = fig.add_subplot(gs[2, 1])
 
-    for ax in [ax_pos, ax_vel, ax_ctrl]:
+    for ax in (ax_pos, ax_vel, ax_ctrl):
         ax.grid(True)
 
     # Position
-    pos_meas_scatter = ax_pos.scatter([], [], s=5, c='blue', alpha=0.3, label='Meas')
-    pos_est_line, = ax_pos.plot([], [], 'r', label='Est')
-    pos_truth_line, = ax_pos.plot([], [], 'gray', label='Truth')
-    pos_sigma_up, = ax_pos.plot([], [], 'C1--', lw=1, label='±3 sigma')
-    pos_sigma_dn, = ax_pos.plot([], [], 'C1--', lw=1)
-    ax_pos.set_ylabel("θ [rad]")
-    ax_pos.legend(
-        loc='upper left',
-        bbox_to_anchor=(1.02, 1.0),
-        borderaxespad=0
-    )
+    meas_line,     = ax_pos.plot([], [], '.', ms=3, alpha=0.5, c='C0', label='Meas')
+    pos_est_line,  = ax_pos.plot([], [], 'r',  label='Est')
+    pos_truth_line,= ax_pos.plot([], [], 'gray', label='Truth')
+    pos_sig_up,    = ax_pos.plot([], [], 'C1--', lw=1, label='±3 sigma')
+    pos_sig_dn,    = ax_pos.plot([], [], 'C1--', lw=1)
+    ax_pos.set_ylabel("θ [ deg]")
+    ax_pos.set_ylim(pos_min, pos_max)
+    ax_pos.legend(loc='upper left', bbox_to_anchor=(1.02, 1.0), borderaxespad=0)
     ax_pos.set_title("State Estimates")
 
     # Velocity
-    vel_est_line, = ax_vel.plot([], [], 'r', label='Est')
-    vel_truth_line, = ax_vel.plot([], [], 'gray', label='Truth')
-    vel_sigma_up, = ax_vel.plot([], [], 'C1--', lw=1, label='±3 sigma')
-    vel_sigma_dn, = ax_vel.plot([], [], 'C1--', lw=1)
-    ax_vel.set_ylabel("θ̇ [rad/s]")
-    ax_vel.legend(
-        loc='upper left',
-        bbox_to_anchor=(1.02, 1.0),
-        borderaxespad=0
-    )
+    vel_est_line,  = ax_vel.plot([], [], 'r',   label='Est')
+    vel_truth_line,= ax_vel.plot([], [], 'gray',label='Truth')
+    vel_sig_up,    = ax_vel.plot([], [], 'C1--', lw=1, label='±3 sigma')
+    vel_sig_dn,    = ax_vel.plot([], [], 'C1--', lw=1)
+    ax_vel.set_ylabel("Vel [ deg/s]")
+    ax_vel.set_ylim(vel_min, vel_max)
+    ax_vel.legend(loc='upper left', bbox_to_anchor=(1.02, 1.0), borderaxespad=0)
 
-    # Control input
-    ctrl_line, = ax_ctrl.plot([], [], 'b', label='Control Input')
+    # Control
+    ctrl_line,     = ax_ctrl.plot([], [], 'b', label='Ctrl Input')
     ax_ctrl.set_ylabel("τ [Nm]")
     ax_ctrl.set_xlabel("Time [s]")
-    ax_ctrl.legend(
-        loc='upper left',
-        bbox_to_anchor=(1.02, 1.0),
-        borderaxespad=0
-    )
+    ax_ctrl.set_ylim(tau_min, tau_max)
+    ax_ctrl.set_title("Control Input")
 
-    # === Initialization ===
+    # Init x-lims (will update each frame)
+    ax_pos.set_xlim(0, min(window, t[-1]))
+    ax_vel.set_xlim(0, min(window, t[-1]))
+    ax_ctrl.set_xlim(0, min(window, t[-1]))
+
     def init():
         rod_line.set_data([], [])
         trace_line.set_data([], [])
         trace_x.clear()
         trace_y.clear()
-
-        pos_meas_scatter.set_offsets(np.empty((0, 2)))
-        for line in [pos_est_line, pos_truth_line, pos_sigma_up, pos_sigma_dn,
-                    vel_est_line, vel_truth_line, vel_sigma_up, vel_sigma_dn,
-                    ctrl_line]:
+        for line in (meas_line, pos_est_line, pos_truth_line,
+                     pos_sig_up, pos_sig_dn,
+                     vel_est_line, vel_truth_line,
+                     vel_sig_up, vel_sig_dn,
+                     ctrl_line):
             line.set_data([], [])
-
         UI_text.set_text('')
-        return (rod_line, trace_line,
-                pos_est_line, pos_truth_line, pos_sigma_up, pos_sigma_dn,
-                vel_est_line, vel_truth_line, vel_sigma_up, vel_sigma_dn,
-                ctrl_line, pos_meas_scatter, UI_text)
+        return (rod_line, trace_line, meas_line, pos_est_line, pos_truth_line,
+                pos_sig_up, pos_sig_dn, vel_est_line, vel_truth_line,
+                vel_sig_up, vel_sig_dn, ctrl_line, UI_text)
 
-    # === Update each frame ===
-    def update(frame):
-        t_now = t[frame]
+    def update(frame_i):
+        i = frame_i
+        t_now = t[i]
 
-        # Pendulum position
-        x = x_pend[frame]
-        y = y_pend[frame]
+        # --- Pendulum (with short tail only)
+        x = x_pend[i]; y = y_pend[i]
         rod_line.set_data([0, x], [0, y])
-
-        trace_x.append(x)
-        trace_y.append(y)
+        trace_x.append(x); trace_y.append(y)
+        if len(trace_x) > max_tail:
+            del trace_x[0]; del trace_y[0]
         trace_line.set_data(trace_x, trace_y)
 
-        # Update text
         UI_text.set_text(
             f"t = {t_now:.2f} s\n"
-            f"θ = {states_truth[frame,0]*180/np.pi:.1f}°\n"
-            f"τ = {control_hist[frame]:.2f} Nm"
+            f"θ = {states_truth[i,0]*180/np.pi:.1f}°\n"
+            f"τ = {control_hist[i]:.2f} Nm"
         )
 
-        # Grow → Scroll mode for time histories
-        if t_now < window:
-            t_min = 0
+        # --- Windowing: GROW -> SCROLL (absolute time on x)
+        if t_now <= window:
+            i0 = 0
+            ax_pos.set_xlim(0, max(t_now, dt))
+            ax_vel.set_xlim(0, max(t_now, dt))
+            ax_ctrl.set_xlim(0, max(t_now, dt))
         else:
-            t_min = t_now - window
-        mask = (t >= t_min) & (t <= t_now)
-        tt = t[mask]
+            i0 = i - max_pts + 1
+            left = t[i0]; right = t_now
+            ax_pos.set_xlim(left, right)
+            ax_vel.set_xlim(left, right)
+            ax_ctrl.set_xlim(left, right)
 
-        # Position subplot
-        pos_meas_scatter.set_offsets(np.column_stack([t[mask], measurements[mask]]))
-        pos_est_line.set_data(tt, states_est[mask, 0])
-        pos_truth_line.set_data(tt, states_truth[mask, 0])
-        pos_sigma_up.set_data(tt, states_est[mask, 0] + 3*np.sqrt(P_hist[mask, 0, 0]))
-        pos_sigma_dn.set_data(tt, states_est[mask, 0] - 3*np.sqrt(P_hist[mask, 0, 0]))
-        ax_pos.set_xlim(t_min, max(t_now, 1e-6))
-        ax_pos.relim()
-        ax_pos.autoscale_view(scalex=False, scaley=True)
+        sl = slice(i0, i+1)
 
-        # Velocity subplot
-        vel_est_line.set_data(tt, states_est[mask, 1])
-        vel_truth_line.set_data(tt, states_truth[mask, 1])
-        vel_sigma_up.set_data(tt, states_est[mask, 1] + 3*np.sqrt(P_hist[mask, 1, 1]))
-        vel_sigma_dn.set_data(tt, states_est[mask, 1] - 3*np.sqrt(P_hist[mask, 1, 1]))
-        ax_vel.set_xlim(t_min, max(t_now, 1e-6))
-        ax_vel.relim()
-        ax_vel.autoscale_view(scalex=False, scaley=True)
+        # Position
+        meas_line.set_data(t[sl],       R2D*(measurements[sl]))
+        pos_est_line.set_data(t[sl],    R2D*(states_est[sl, 0]))
+        pos_truth_line.set_data(t[sl],  R2D*(states_truth[sl, 0]))
+        pos_sig_up.set_data(t[sl],      R2D*(states_est[sl, 0] + pos_3s[sl]))
+        pos_sig_dn.set_data(t[sl],      R2D*(states_est[sl, 0] - pos_3s[sl]))
 
-        # Control subplot
-        ctrl_line.set_data(tt, control_hist[mask])
-        ax_ctrl.set_xlim(t_min, max(t_now, 1e-6))
-        ax_ctrl.relim()
-        ax_ctrl.autoscale_view(scalex=False, scaley=True)
+        # Velocity
+        vel_est_line.set_data(t[sl],    R2D*(states_est[sl, 1]))
+        vel_truth_line.set_data(t[sl],  R2D*(states_truth[sl, 1]))
+        vel_sig_up.set_data(t[sl],      R2D*(states_est[sl, 1] + vel_3s[sl]))
+        vel_sig_dn.set_data(t[sl],      R2D*(states_est[sl, 1] - vel_3s[sl]))
 
-        return (rod_line, trace_line,
-                pos_est_line, pos_truth_line, pos_sigma_up, pos_sigma_dn,
-                vel_est_line, vel_truth_line, vel_sigma_up, vel_sigma_dn,
-                ctrl_line, pos_meas_scatter, UI_text)
+        # Control
+        ctrl_line.set_data(t[sl], control_hist[sl])
 
-    # === Animation ===
-    fps = int(1/dt) // 60  # adjust playback speed
+        # With moving x-lims, blit must be False to redraw ticks
+        return (rod_line, trace_line, meas_line, pos_est_line, pos_truth_line,
+                pos_sig_up, pos_sig_dn, vel_est_line, vel_truth_line,
+                vel_sig_up, vel_sig_dn, ctrl_line, UI_text)
+
     ani = animation.FuncAnimation(
-        fig,
-        update,
-        frames=range(0, len(t), fps),
+        fig, update,
+        frames=frames,
         init_func=init,
-        blit=False,
-        interval=dt*1000*fps,
+        blit=False,              # needed so x-axis ticks update with moving limits
+        interval=max(15, int(1000*dt*skip)),
         repeat=True
     )
 
