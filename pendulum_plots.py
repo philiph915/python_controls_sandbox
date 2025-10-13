@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import os
 
 R2D = 180 / np.pi
 
@@ -13,7 +14,8 @@ def animate_pendulum_dashboard(
     control_hist,     # (N,)
     L,                # pendulum length
     window=3.0,       # seconds visible
-    trace_len=0.75    # seconds of pendulum tail to keep
+    trace_len=0.75,   # seconds of pendulum tail to keep
+    saveFig = False  # option to save animations
 ):
     N = len(t)
     skip = max(1, int(1/dt) // 60)       # playback throttle
@@ -177,6 +179,17 @@ def animate_pendulum_dashboard(
         interval=max(15, int(1000*dt*skip)),
         repeat=True
     )
+
+    if saveFig:
+        print("Saving animation...")
+        ani.save(
+            os.path.join("figs","nonlinear_pendulum","pendulum_animation.gif"),
+            writer="pillow",
+            fps=30,        # more frames per second
+            dpi=80,        # higher resolution
+        )
+        print("Done.\n")
+
 
     plt.tight_layout()
     plt.subplots_adjust(right=0.9)

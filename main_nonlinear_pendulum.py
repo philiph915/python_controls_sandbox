@@ -231,5 +231,5 @@ make_pendulum_static_plots(
 # Show pendulum "DAQ" figure
 from pendulum_plots import animate_pendulum_dashboard
 ani = animate_pendulum_dashboard(
-    t, dt, states_truth, states_est, measurements, P_hist, u_hist, L
+    t, dt, states_truth, states_est, measurements, P_hist, u_hist, L, saveFig = False
 )
